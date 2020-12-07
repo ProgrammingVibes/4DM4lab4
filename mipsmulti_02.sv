@@ -214,7 +214,7 @@ module datapath(input  logic        clk, reset,
   logic [31:0] aluresult, aluout;
   logic [31:0] signimm;   // the sign-extended immediate
   logic [31:0] signimmsh;	// the sign-extended immediate shifted left by 2
-  logic [31:0] wd3, rd1, rd2;
+  logic [31:0] wd3, rd1, rd2, rda, rdb, pcjump;
 
   // op and funct fields to controller
   assign op = instr[31:26];
@@ -233,8 +233,87 @@ module datapath(input  logic        clk, reset,
   // so it's easier to understand.
 
   // ADD CODE HERE
+  
+  // register file logic
+  regfile  rf(clk, regwrite, instr[25:21], 
+                 instr[20:16], writereg,
+                 wd3, rd1, rd2);
+			/*input  logic        clk, 
+               input  logic        we3, 
+               input  logic [4:0]  ra1, ra2, wa3, 
+               input  logic [31:0] wd3, 
+               output logic [31:0] rd1, rd2);*/
+  
+  mux2 #(5)   wrmux(instr[20:16], instr[15:11],
+                    regdst, writereg);
+  
+  mux2 #(32)  wd3mux(aluout, data,
+                     memtoreg, wd3);
+  
+  
+  //ALU logic
+  //signed extended immediate values
+  signimm =  {16{instr[15]}, instr[15:0]};
+  signimmsh = {signimm[29:0], 2'b00};
+  
+  //choosing srcA
+  mux2 #(32) srcamux(pc, rda,
+					 alusrca, srca);
+  
+  //choosing srcB
+  mux4 #(32) srcbmux(rdb, 32'd4, signimm, signimmsh,
+					 alusrcb, srcb);
+  
+	
+  alu alu(srca, srcb, alucontrol, 
+		  aluresult, zero);
 
-  // datapath
+  
+  //aluresult logic
+  pcjump = {pc[31:28], instr[25:0], 2'b00};
+  mux3 #(32) pcnextmux(aluresult, aluout, pcjump, pcsrc
+					   pcnext);
+
+
+  //memory input
+  //instruction/data memory address input
+  mux2 #(32) memamux(pc, aluout,
+					 iord, a);
+  writedata = rdb;
+  
+  
+
+  //sequential logic
+  always_ff @ (posedge clk or negedge reset)
+	if(reset)
+		//reset values to 0
+		pc <= 32'd0;
+		instr <= 32'd0;
+		data <= 32'd0;
+		rda <= 32'd0;
+		rdb <= 32'd0;
+		aluout <= 32'd0;
+		
+	else
+		//written mostly from left to right of the datapath schematic
+		
+		//program counter
+		if(pcen) pc <= pcnext;
+		
+		
+		//memory output
+		if(irwrite) instr <= readdata;
+		
+		data <= readdata;
+		
+		//regfile output
+		rda <= rd1;
+		rdb <= rd2;
+		
+		//alu output 
+		aluout <= aluresult;
+	end
+  end
   
 endmodule
 
